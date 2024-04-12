@@ -27,6 +27,17 @@ type Submission struct {
 	ViewCount            int     `json:"view_count"`
 }
 
+type Comment struct {
+	ID           string `json:"id"`
+	Text         string `json:"body"`
+	SubmissionID string `json:"link_id"`
+	ParentID     string `json:"parent_id"`
+	Subreddit    string `json:"subreddit"`
+	Author       string `json:"author"`
+	Score        int    `json:"score"`
+	CreatedUTC   int    `json:"created_utc"`
+}
+
 type Subreddit struct {
 	Name        string // primary key
 	Id          string

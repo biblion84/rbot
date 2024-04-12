@@ -16,7 +16,6 @@ func OpenDatabase(path string) (*sql.DB, error) {
 		PRAGMA journal_mode = WAL;
 		PRAGMA busy_timeout = 5000;
 		PRAGMA synchronous = NORMAL;
-		PRAGMA cache_size = -1000000000;
 		PRAGMA foreign_keys = true;
 		PRAGMA temp_store = memory;`)
 
@@ -31,7 +30,7 @@ CREATE TABLE IF NOT EXISTS subreddit (
 	subscribers INTEGER,
 	type TEXT
 );
-CREATE TABLE if not exists submissions (
+CREATE TABLE if not exists submission (
     id TEXT PRIMARY KEY,
     author TEXT,
     author_created_utc INTEGER,
@@ -55,6 +54,33 @@ CREATE TABLE if not exists submissions (
     view_count INTEGER,
     FOREIGN KEY (subreddit) REFERENCES subreddit(name)
 );
+CREATE TABLE if not exists comment (
+    id TEXT PRIMARY KEY,
+    text TEXT,
+    submission_id TEXT,
+    parent_id TEXT,
+    subreddit TEXT,
+    author TEXT,
+    score INTEGER,
+    created_utc INTEGER,
+
+    FOREIGN KEY (subreddit) REFERENCES subreddit(name),
+    FOREIGN KEY (submission_id) REFERENCES submission(id)
+);
+
+
+CREATE TABLE if not exists comment_orphan (
+    id TEXT PRIMARY KEY,
+    text TEXT,
+    submission_id TEXT,
+    parent_id TEXT,
+    subreddit TEXT,
+    author TEXT,
+    score INTEGER,
+    created_utc INTEGER
+);
+
+	CREATE INDEX IF NOT EXISTS subreddit_idx ON submission (subreddit);
 `)
 	return err
 }
