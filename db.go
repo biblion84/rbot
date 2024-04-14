@@ -4,13 +4,8 @@ import (
 	"database/sql"
 
 	_ "github.com/lib/pq"
-
-	"github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
-
-// https://www.postgresql.org/docs/current/errcodes-appendix.html
-const ERR_FOREIGN_KEY_VIOLATION = pq.ErrorCode("23503")
 
 func OpenPostgresDatabase() (*sql.DB, error) {
 	// Local database, very secure, wow
@@ -18,7 +13,7 @@ func OpenPostgresDatabase() (*sql.DB, error) {
 	return db, err
 }
 
-func OpenDatabase(path string) (*sql.DB, error) {
+func OpenSqliteDatabase(path string) (*sql.DB, error) {
 	var err error
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
@@ -27,7 +22,7 @@ func OpenDatabase(path string) (*sql.DB, error) {
 	_, err = db.Exec(`
 		PRAGMA journal_mode = WAL;
 		PRAGMA busy_timeout = 5000;
-		PRAGMA synchronous = NORMAL;
+		PRAGMA synchronous = OFF;
 		PRAGMA foreign_keys = true;
 		PRAGMA cache_size = 7000000;
 		PRAGMA temp_store = memory;`)
@@ -88,7 +83,6 @@ CREATE TABLE if not exists comment (
 );
 CREATE INDEX IF NOT EXISTS comment_submission ON comment (submission_id);
 CREATE INDEX IF NOT EXISTS comment_subreddit ON comment (subreddit);
-
 CREATE INDEX IF NOT EXISTS comment_author_idx on comment(author);
 
 CREATE TABLE if not exists comment2 (
@@ -106,7 +100,7 @@ CREATE INDEX IF NOT EXISTS comment2_subreddit_author_idx on comment2(subreddit,a
 	return err
 }
 
-func CreateTables(db *sql.DB) error {
+func CreateSqliteTables(db *sql.DB) error {
 	_, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS subreddit (
 	name TEXT PRIMARY KEY,

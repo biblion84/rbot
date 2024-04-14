@@ -29,13 +29,14 @@ func Decode[T any](r io.Reader, out chan T) {
 
 func Ingest[T any](in chan T, dispatch func([]T)) {
 	accLen := 10_000
+
 	inFLight := make(chan struct{}, runtime.NumCPU())
 	accumulator := make([]T, 0, accLen)
 	for submission := range in {
 		accumulator = append(accumulator, submission)
 		if len(accumulator) == accLen {
+			inFLight <- struct{}{}
 			go func(accumulator []T) {
-				inFLight <- struct{}{}
 				start := time.Now()
 				dispatch(accumulator)
 				fmt.Printf("took %d ms\n", time.Since(start).Milliseconds())
@@ -118,10 +119,10 @@ func DispatchSubmissions() func(in []Submission) {
 }
 
 func main() {
-	db, err := OpenPostgresDatabase()
+	db, err := OpenSqliteDatabase("data/submission-test.db")
 	p(err)
 
-	p(CreatePostgresTables(db))
+	p(CreateSqliteTables(db))
 
 	DB = db
 
@@ -131,14 +132,14 @@ func main() {
 
 	fileToOpen := os.Args[1]
 
-	file, err := os.Open(path.Join("data", fileToOpen))
+	file, err := os.Open(path.Join("I:", "Data", fileToOpen))
 	p(err)
 
 	// RS_* for submsissions files, RC_* for comments
 	SUBMISSION := fileToOpen[:2] == "RS"
 
 	if SUBMISSION {
-		submissionChan := make(chan Submission, 10)
+		submissionChan := make(chan Submission, 100)
 
 		go Ingest(submissionChan, DispatchSubmissions())
 
