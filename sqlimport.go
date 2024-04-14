@@ -17,11 +17,10 @@ import (
 
 func main() {
 
-	dbPath := path.Join("data", "submission.db")
-	//
-	//os.Remove(dbPath)
-	//os.Remove(dbPath + "-shm")
-	//os.Remove(dbPath + "-wal")
+	dbPath := path.Join("data", "submission3.db")
+	os.Remove(dbPath)
+	os.Remove(dbPath + "-shm")
+	os.Remove(dbPath + "-wal")
 
 	writeDb, err := OpenDatabase(dbPath)
 	p(err)
@@ -74,9 +73,6 @@ func main() {
 			fmt.Printf("%d, took %d ms\n", inserted, time.Since(start).Milliseconds())
 			start = time.Now()
 		}
-		//if inserted == 1_000_000 {
-		//	break
-		//}
 		if COMMENT {
 			timer.Start("decode")
 			var c Comment
