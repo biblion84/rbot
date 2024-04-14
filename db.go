@@ -3,10 +3,15 @@ package main
 import (
 	"database/sql"
 
+	"github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// https://www.postgresql.org/docs/current/errcodes-appendix.html
+const ERR_FOREIGN_KEY_VIOLATION = pq.ErrorCode("23503")
+
 func OpenPostgresDatabase() (*sql.DB, error) {
+	// Local database, very secure, wow
 	db, err := sql.Open("postgres", "user=postgres password=root dbname=postgres sslmode=disable")
 	return db, err
 }
@@ -30,6 +35,10 @@ func OpenDatabase(path string) (*sql.DB, error) {
 
 func CreatePostgresTables(db *sql.DB) error {
 	_, err := db.Exec(`
+-- DROP TABLE submission;
+-- DROP TABLE subreddit;
+DROP TABLE IF EXISTS comment_orphan;
+DROP TABLE IF EXISTS comment;
 CREATE TABLE IF NOT EXISTS subreddit (
 	name TEXT PRIMARY KEY,
 	id TEXT,
@@ -60,7 +69,24 @@ CREATE TABLE if not exists submission (
     url_overridden_by_dest TEXT,
     view_count INTEGER NOT NULL,
     FOREIGN KEY (subreddit) REFERENCES subreddit(name)
-);`)
+);
+
+-- the two foreign key, submission_id and subreddit are not marked as such for a reason
+-- I'm inserting data month by month, the comments made on January 2023 might have a submission from December 2022 etc, etc..
+-- So this is an "orphan" table, if needed I'll create a table with the correct foreign keys once a critical mass of submission have been inserted
+CREATE TABLE if not exists comment (
+    id TEXT PRIMARY KEY,
+    text TEXT,
+    submission_id TEXT, -- foreign key on submission(id)
+    parent_id TEXT,
+    subreddit TEXT, -- foreign key to subreddit(name)
+    author TEXT,
+    score INTEGER,
+    created_utc INTEGER
+);
+CREATE INDEX IF NOT EXISTS comment_submission ON comment (submission_id);
+CREATE INDEX IF NOT EXISTS comment_subreddit ON comment (subreddit);
+`)
 	return err
 }
 
