@@ -3,6 +3,8 @@ package main
 import (
 	"database/sql"
 
+	_ "github.com/lib/pq"
+
 	"github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -37,8 +39,8 @@ func CreatePostgresTables(db *sql.DB) error {
 	_, err := db.Exec(`
 -- DROP TABLE submission;
 -- DROP TABLE subreddit;
-DROP TABLE IF EXISTS comment_orphan;
-DROP TABLE IF EXISTS comment;
+-- DROP TABLE IF EXISTS comment_orphan;
+-- DROP TABLE IF EXISTS comment;
 CREATE TABLE IF NOT EXISTS subreddit (
 	name TEXT PRIMARY KEY,
 	id TEXT,
@@ -86,6 +88,20 @@ CREATE TABLE if not exists comment (
 );
 CREATE INDEX IF NOT EXISTS comment_submission ON comment (submission_id);
 CREATE INDEX IF NOT EXISTS comment_subreddit ON comment (subreddit);
+
+CREATE INDEX IF NOT EXISTS comment_author_idx on comment(author);
+
+CREATE TABLE if not exists comment2 (
+    id TEXT PRIMARY KEY,
+    text TEXT,
+    submission_id TEXT, -- foreign key on submission(id)
+    parent_id TEXT,
+    subreddit TEXT, -- foreign key to subreddit(name)
+    author TEXT,
+    score INTEGER,
+    created_utc INTEGER
+);
+CREATE INDEX IF NOT EXISTS comment2_subreddit_author_idx on comment2(subreddit,author);
 `)
 	return err
 }
