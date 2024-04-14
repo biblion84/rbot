@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path"
 	"runtime"
@@ -82,11 +85,12 @@ func DispatchSubmissions() func(in []Submission) {
 		subredditsLock.Lock()
 		tx, err := DB.Begin()
 		p(err)
+		stmt, err := tx.Prepare(`INSERT INTO subreddit (id, name, subscribers, type) VALUES ($1, $2, $3, $4)`)
+		p(err)
 		for _, s := range in {
 			if !subreddits[s.Subreddit] {
 				subreddits[s.Subreddit] = true
-				_, err := tx.Exec(`INSERT INTO subreddit (id, name, subscribers, type) VALUES ($1, $2, $3, $4)`,
-					s.SubredditId, s.Subreddit, s.SubredditSubscribers, s.SubredditType)
+				_, err := stmt.Exec(s.SubredditId, s.Subreddit, s.SubredditSubscribers, s.SubredditType)
 				p(err)
 			}
 		}
@@ -96,7 +100,7 @@ func DispatchSubmissions() func(in []Submission) {
 		tx, err = DB.Begin()
 		p(err)
 
-		stmt, err := tx.Prepare(`INSERT INTO submission (id, author, author_created_utc, created_utc, domain, is_original_content, is_self, 
+		stmt, err = tx.Prepare(`INSERT INTO submission (id, author, author_created_utc, created_utc, domain, is_original_content, is_self, 
               name, num_comments, num_crossposts, over18, pinned, score, subreddit, 
 			  thumbnail, title, total_awards_received, upvote_ratio, url, url_overridden_by_dest, view_count) 
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`)
@@ -119,10 +123,13 @@ func DispatchSubmissions() func(in []Submission) {
 }
 
 func main() {
-	db, err := OpenSqliteDatabase("data/submission-test.db")
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+	db, err := OpenPostgresDatabase()
 	p(err)
 
-	p(CreateSqliteTables(db))
+	p(CreatePostgresTables(db))
 
 	DB = db
 

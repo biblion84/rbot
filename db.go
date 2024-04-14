@@ -159,11 +159,11 @@ CREATE TABLE if not exists comment_orphan (
     score INTEGER,
     created_utc INTEGER
 ) STRICT;
-
-	CREATE INDEX IF NOT EXISTS comment_orphan_parent_idx ON comment_orphan (subreddit);
-	CREATE INDEX IF NOT EXISTS subreddit_idx ON submission (subreddit);
-	CREATE INDEX IF NOT EXISTS comment_author_idx on comment(author);
-	CREATE INDEX IF NOT EXISTS comment_subreddit_idx on comment(subreddit);
+-- 
+-- 	CREATE INDEX IF NOT EXISTS comment_orphan_parent_idx ON comment_orphan (subreddit);
+-- 	CREATE INDEX IF NOT EXISTS subreddit_idx ON submission (subreddit);
+-- 	CREATE INDEX IF NOT EXISTS comment_author_idx on comment(author);
+-- 	CREATE INDEX IF NOT EXISTS comment_subreddit_idx on comment(subreddit);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS comment_fts USING fts5(
 	 id UNINDEXED,

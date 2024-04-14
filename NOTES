@@ -1,0 +1,5 @@
+When populating the sqlite DB, it is important to drop the index before injecting lots of data
+
+The postgresql DB is populated much quicker, the sqlite is limited to 1 thread, whereas on postgres I use runtime.NumCpu() thread.
+I can populate the postgres without dropping the indexes which is a huge QOL.
+
