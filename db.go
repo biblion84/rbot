@@ -6,6 +6,11 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+func OpenPostgresDatabase() (*sql.DB, error) {
+	db, err := sql.Open("postgres", "user=postgres password=root dbname=postgres sslmode=disable")
+	return db, err
+}
+
 func OpenDatabase(path string) (*sql.DB, error) {
 	var err error
 	db, err := sql.Open("sqlite3", path)
@@ -21,6 +26,42 @@ func OpenDatabase(path string) (*sql.DB, error) {
 		PRAGMA temp_store = memory;`)
 
 	return db, err
+}
+
+func CreatePostgresTables(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS subreddit (
+	name TEXT PRIMARY KEY,
+	id TEXT,
+	subscribers INTEGER,
+	type TEXT
+);
+
+CREATE TABLE if not exists submission (
+    id TEXT PRIMARY KEY,
+    author TEXT NOT NULL,
+    author_created_utc INTEGER NOT NULL,
+    created_utc INTEGER NOT NULL,
+    domain TEXT NOT NULL,
+    is_original_content BOOLEAN,
+    is_self BOOLEAN,
+    name TEXT NOT NULL,
+    num_comments INTEGER NOT NULL,
+    num_crossposts INTEGER NOT NULL,
+    over18 BOOLEAN,
+    pinned BOOLEAN,
+    score INTEGER NOT NULL,
+    subreddit TEXT NOT NULL,
+    thumbnail TEXT,
+    title TEXT NOT NULL,
+    total_awards_received INTEGER NOT NULL,
+    upvote_ratio REAL NOT NULL,
+    url TEXT,
+    url_overridden_by_dest TEXT,
+    view_count INTEGER NOT NULL,
+    FOREIGN KEY (subreddit) REFERENCES subreddit(name)
+);`)
+	return err
 }
 
 func CreateTables(db *sql.DB) error {

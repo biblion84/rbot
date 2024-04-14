@@ -10,7 +10,7 @@ import (
 
 	"github.com/goccy/go-json"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq"
 
 	"rbot/timer"
 )
@@ -22,12 +22,10 @@ func main() {
 	os.Remove(dbPath + "-shm")
 	os.Remove(dbPath + "-wal")
 
-	writeDb, err := OpenDatabase(dbPath)
-	p(err)
-	readDb, err := OpenDatabase(dbPath)
+	db, err := OpenPostgresDatabase()
 	p(err)
 
-	p(CreateTables(writeDb))
+	p(CreatePostgresTables(db))
 
 	if len(os.Args) <= 1 {
 		panic("provide a file to open")
@@ -49,7 +47,7 @@ func main() {
 
 	start := time.Now()
 
-	subreddits, err := GetSubreddits(readDb)
+	subreddits, err := GetSubreddits(db)
 	p(err)
 
 	var tx *sql.Tx
@@ -64,14 +62,17 @@ func main() {
 			if tx != nil {
 				p(tx.Commit())
 			}
-			tx, err = writeDb.Begin()
+			tx, err = db.Begin()
 			p(err)
-			p(submissionStmt.PrepateSubmissionStmt(tx))
-			p(submissionStmt.PrepareCommentStmt(tx))
+			p(submissionStmt.PrepatePostgresSubmissionStmt(tx))
+			//p(submissionStmt.PrepareCommentStmt(tx))
 			timer.Stop("Transaction")
 
 			fmt.Printf("%d, took %d ms\n", inserted, time.Since(start).Milliseconds())
 			start = time.Now()
+		}
+		if inserted == 1_000_000 {
+			break
 		}
 		if COMMENT {
 			timer.Start("decode")
@@ -86,6 +87,7 @@ func main() {
 			timer.Start("subreddit")
 			if _, found := subreddits[c.Subreddit]; !found {
 				p(CreateOrphanComment(tx, c))
+				timer.Stop("subreddit")
 				continue
 			}
 			timer.Stop("subreddit")
@@ -105,7 +107,7 @@ func main() {
 
 			timer.Start("subreddit")
 			if _, found := subreddits[s.Subreddit]; !found {
-				err := CreateSubreddit(tx, Subreddit{
+				err := CreatePostgresSubreddit(tx, Subreddit{
 					Name:        s.Subreddit,
 					Id:          s.SubredditId,
 					Subscribers: s.SubredditSubscribers,
@@ -142,10 +144,24 @@ func CreateSubreddit(tx *sql.Tx, sub Subreddit) error {
 		sub.Id, sub.Name, sub.Subscribers, sub.Type)
 	return err
 }
+func CreatePostgresSubreddit(tx *sql.Tx, sub Subreddit) error {
+	_, err := tx.Exec(`INSERT INTO subreddit (id, name, subscribers, type) VALUES ($1, $2, $3, $4)`,
+		sub.Id, sub.Name, sub.Subscribers, sub.Type)
+	return err
+}
 
 type SubmissionStmt struct {
 	submissionStmt *sql.Stmt
 	commentStmt    *sql.Stmt
+}
+
+func (subStmt *SubmissionStmt) PrepatePostgresSubmissionStmt(tx *sql.Tx) error {
+	stmt, err := tx.Prepare(`INSERT INTO submission (id, author, author_created_utc, created_utc, domain, is_original_content, is_self, 
+              name, num_comments, num_crossposts, over18, pinned, score, subreddit, 
+			  thumbnail, title, total_awards_received, upvote_ratio, url, url_overridden_by_dest, view_count) 
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`)
+	subStmt.submissionStmt = stmt
+	return err
 }
 
 func (subStmt *SubmissionStmt) PrepateSubmissionStmt(tx *sql.Tx) error {
