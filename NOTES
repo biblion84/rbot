@@ -4,4 +4,5 @@ The postgresql DB is populated much quicker, the sqlite is limited to 1 thread, 
 I can populate the postgres without dropping the indexes which is a huge QOL.
 Postgres have default settings that must be changed depending on your hardware.
     For this project, on a table of only 80GB I started to have issues
+    It need to have "set enable_seqscan = off;" to have decent query plans.
 

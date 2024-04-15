@@ -30,13 +30,13 @@ type Submission struct {
 }
 
 type Comment struct {
-	Id           string `json:"id"`
-	Text         string `json:"body"`
-	SubmissionID string `json:"link_id"`
-	ParentID     string `json:"parent_id"`
-	Subreddit    string `json:"subreddit"`
-	Author       string `json:"author"`
-	Score        int    `json:"score"`
+	Id           string          `json:"id"`
+	Text         string          `json:"body"`
+	SubmissionID string          `json:"link_id"`
+	ParentID     json.RawMessage `json:"parent_id"`
+	Subreddit    string          `json:"subreddit"`
+	Author       string          `json:"author"`
+	Score        int             `json:"score"`
 	//CreatedUTC   json.RawMessage `json:"created_utc"`
 }
 

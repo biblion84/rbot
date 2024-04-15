@@ -21,7 +21,7 @@ import (
 // global database, because fuck it
 var DB *sql.DB
 
-func Decode[T any](r io.Reader, out chan T) {
+func Decode[T any](r io.Reader, out chan T, reject chan error) {
 
 	dec := json.NewDecoder(r)
 	i := 0
@@ -29,11 +29,14 @@ func Decode[T any](r io.Reader, out chan T) {
 
 	for dec.More() {
 		var result T
-		p(dec.Decode(&result))
+		err := dec.Decode(&result)
 		out <- result
+		if err != nil {
+			reject <- err
+		}
 		i++
 		if i%10_000 == 0 {
-			fmt.Printf("%dms elapsed\n", time.Since(start).Milliseconds())
+			fmt.Printf("%d %dms elapsed\t", i, time.Since(start).Milliseconds())
 			start = time.Now()
 		}
 
@@ -68,6 +71,9 @@ func sanitize(s string) string {
 }
 
 func sanitizeInteger(raw json.RawMessage) string {
+	if string(raw) == "null" {
+		return "0"
+	}
 	split := strings.Split(string(raw), ".")[0]
 	if split == "" {
 		return "0"
@@ -88,12 +94,12 @@ func DispatchComments(in []Comment) {
 	tx, err := DB.Begin()
 	p(err)
 
-	stmt, err := tx.Prepare(`INSERT INTO comment2 (id, text, submission_id, parent_id, subreddit, author, score, created_utc)
-								VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`)
+	stmt, err := tx.Prepare(`INSERT INTO comment (id, text, submission_id, parent_id, subreddit, author, score, created_utc)
+								VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`)
 	p(err)
 
 	for _, c := range in {
-		_, err = stmt.Exec(sanitize(c.Id), sanitize(c.Text), canonalize(sanitize(c.SubmissionID)), canonalize(sanitize(c.ParentID)),
+		_, err = stmt.Exec(sanitize(c.Id), sanitize(c.Text), canonalize(sanitize(c.SubmissionID)), canonalize(sanitize(string(c.ParentID))),
 			sanitize(c.Subreddit), sanitize(c.Author), c.Score, "0")
 		if err != nil {
 			fmt.Println(c)
@@ -171,51 +177,82 @@ func main() {
 
 	DB = db
 
-	paths, err := filepath.Glob(path.Join("D:", "reddit", "*.zst"))
+	paths, err := filepath.Glob(path.Join("D:", "reddit", "*"))
 
 	subreddits, err := GetSubreddits(db)
 	p(err)
 
 	dispatchSubmissions := DispatchSubmissions(subreddits)
 
-	for _, filepath := range paths {
-		go func(filepath string) {
-			fmt.Printf("starting on %s\n", filepath)
-			file, err := os.Open(filepath)
-			p(err)
-
-			zstdReader, err := zstd.NewReader(file, zstd.WithDecoderMaxWindow(1<<31))
-			p(err)
-
-			// RS_* for submsissions files, RC_* for comments
-			SUBMISSION := strings.Contains(filepath, "RS_")
-
-			start := time.Now()
-
-			if SUBMISSION {
-				submissionChan := make(chan Submission, 10_000)
-
-				go Ingest(submissionChan, dispatchSubmissions)
-
-				Decode(zstdReader, submissionChan)
-			} else {
-				commentChan := make(chan Comment, 10)
-
-				//go Ingest(commentChan, DispatchComments)
-
-				go func() {
-					for {
-						<-commentChan
-					}
-				}()
-
-				Decode(zstdReader, commentChan)
+	rejectChan := make(chan error, 1)
+	go func() {
+		errorLogged := 0
+		errorFile, err := os.OpenFile("err.txt", os.O_TRUNC|os.O_CREATE, 0640)
+		p(err)
+		for {
+			err := <-rejectChan
+			errorLogged++
+			if errorLogged > 10_000 {
+				panic("too many error logged")
 			}
-			file.Close()
-			zstdReader.Close()
+			errorFile.Write([]byte(err.Error()))
+		}
+	}()
 
-			fmt.Printf("took %d s\t", time.Since(start).Seconds())
-		}(filepath)
+	for _, filepath := range paths {
+		fmt.Printf("starting on %s\n", filepath)
+		file, err := os.Open(filepath)
+		p(err)
+
+		var reader io.ReadCloser
+
+		if strings.HasSuffix(filepath, ".zst") {
+			zstdReader, err := zstd.NewReader(file, zstd.WithDecoderMaxWindow(1<<31), zstd.WithDecoderLowmem(false))
+			p(err)
+			reader = zstdReader.IOReadCloser()
+		} else {
+			reader = file
+		}
+
+		// RS_* for submsissions files, RC_* for comments
+		SUBMISSION := strings.Contains(filepath, "RS_")
+
+		start := time.Now()
+
+		if SUBMISSION {
+			submissionChan := make(chan Submission, 100_000)
+
+			go Ingest(submissionChan, dispatchSubmissions)
+
+			//go func() {
+			//	i := 0
+			//	for {
+			//		<-submissionChan
+			//		i++
+			//		if i%10_000 == 0 {
+			//			fmt.Printf("%d ingested\n", i)
+			//		}
+			//	}
+			//}()
+
+			Decode(reader, submissionChan, rejectChan)
+		} else {
+			commentChan := make(chan Comment, 10)
+
+			go Ingest(commentChan, DispatchComments)
+
+			//go func() {
+			//	for {
+			//		<-commentChan
+			//	}
+			//}()
+
+			Decode(reader, commentChan, rejectChan)
+		}
+		file.Close()
+		reader.Close()
+
+		fmt.Printf("took %d s\t", time.Since(start).Seconds())
 	}
 
 	wg := sync.WaitGroup{}

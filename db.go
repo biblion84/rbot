@@ -37,6 +37,7 @@ func CreatePostgresTables(db *sql.DB) error {
 -- DROP TABLE IF EXISTS comment_orphan;
 DROP TABLE IF EXISTS submission2;
 DROP TABLE IF EXISTS comment2;
+DROP TABLE IF EXISTS comment;
 CREATE TABLE IF NOT EXISTS subreddit (
 	name TEXT PRIMARY KEY,
 	id TEXT,

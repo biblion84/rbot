@@ -90,7 +90,7 @@ FROM (
 ORDER BY pg_total_relation_size(full_table_name) DESC;
 
 
-select count(*) from comment;
+select count(*) from comment2;
 
 select * from comment order by id desc limit 1;
 
@@ -187,6 +187,8 @@ select * from comment order by score desc;
 explain
 select count(*), subreddit from submission where author = 'I_might_be_weasel' group by subreddit;
 
+explain
+select count(*) from comment where author = 'I_might_be_weasel';
 
 SELECT
     tablename,
@@ -202,3 +204,21 @@ ORDER BY
 
 
 CREATE INDEX IF NOT EXISTS submission_author_idx ON submission(author)
+
+
+select * from comment2 where created_utc != 0 limit 10;
+
+TRUNCATE TABLE comment;
+
+
+select count(*), subreddit from comment group by subreddit order by count(*) desc;
+
+set enable_seqscan = off;
+
+
+explain
+select count(*), subreddit from comment group by subreddit order by count(*) desc;
+
+
+
+select * from comment2;
