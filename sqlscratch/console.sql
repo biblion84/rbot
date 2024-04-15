@@ -122,7 +122,7 @@ CREATE INDEX idx_fts_on_comment2 ON comment2 USING GIN(tsv);
 select count(*) from comment2;
 
 explain
-select * from comment2 where tsv @@ to_tsquery('english', 'motherfucker & you');
+select * from comment2 where tsv @@ to_tsquery('english', 'motherfucker');
 
 
 CREATE INDEX IF NOT EXISTS comment_subreddit_author_idx on comment(subreddit, author);
@@ -183,3 +183,22 @@ select * from comment order by score desc limit 100;
 
 explain
 select * from comment order by score desc;
+
+explain
+select count(*), subreddit from submission where author = 'I_might_be_weasel' group by subreddit;
+
+
+SELECT
+    tablename,
+    indexname,
+    indexdef
+FROM
+    pg_indexes
+WHERE
+    schemaname = 'public'
+ORDER BY
+    tablename,
+    indexname;
+
+
+CREATE INDEX IF NOT EXISTS submission_author_idx ON submission(author)

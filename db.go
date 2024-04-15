@@ -35,7 +35,8 @@ func CreatePostgresTables(db *sql.DB) error {
 -- DROP TABLE submission;
 -- DROP TABLE subreddit;
 -- DROP TABLE IF EXISTS comment_orphan;
--- DROP TABLE IF EXISTS comment;
+DROP TABLE IF EXISTS submission2;
+DROP TABLE IF EXISTS comment2;
 CREATE TABLE IF NOT EXISTS subreddit (
 	name TEXT PRIMARY KEY,
 	id TEXT,
@@ -43,7 +44,7 @@ CREATE TABLE IF NOT EXISTS subreddit (
 	type TEXT
 );
 
-CREATE TABLE if not exists submission (
+CREATE TABLE if not exists submission2 (
     id TEXT PRIMARY KEY,
     author TEXT NOT NULL,
     author_created_utc INTEGER NOT NULL,
@@ -64,8 +65,8 @@ CREATE TABLE if not exists submission (
     upvote_ratio REAL NOT NULL,
     url TEXT,
     url_overridden_by_dest TEXT,
-    view_count INTEGER NOT NULL,
-    FOREIGN KEY (subreddit) REFERENCES subreddit(name)
+    view_count INTEGER NOT NULL
+--     FOREIGN KEY (subreddit) REFERENCES subreddit(name)
 );
 
 -- the two foreign key, submission_id and subreddit are not marked as such for a reason
@@ -84,7 +85,9 @@ CREATE TABLE if not exists comment (
 CREATE INDEX IF NOT EXISTS comment_submission ON comment (submission_id);
 CREATE INDEX IF NOT EXISTS comment_subreddit ON comment (subreddit);
 CREATE INDEX IF NOT EXISTS comment_author_idx on comment(author);
+CREATE INDEX IF NOT EXISTS submission_author_idx ON submission(author);
 
+-- test db, so that I have a feeling on the index impacts, before creating them on the main table, which takes ages
 CREATE TABLE if not exists comment2 (
     id TEXT PRIMARY KEY,
     text TEXT,
