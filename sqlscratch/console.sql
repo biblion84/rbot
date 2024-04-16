@@ -95,6 +95,8 @@ select count(*) from comment2;
 select * from comment order by id desc limit 1;
 
 
+select count(*) from subreddit;
+
 select * from comment limit 100;
 
 
@@ -222,3 +224,63 @@ select count(*), subreddit from comment group by subreddit order by count(*) des
 
 
 select * from comment2;
+
+
+
+show max_wal_size;
+show wal_level;
+show archive_mode;
+show max_wal_senders;
+
+
+ALTER SYSTEM SET
+    wal_level = 'minimal';
+
+ALTER SYSTEM SET
+    archive_mode = 'off';
+
+ALTER SYSTEM SET
+    max_wal_senders = '0';
+
+ALTER SYSTEM SET
+    fsync = off;
+
+
+select * from comment2;
+
+
+
+
+
+
+
+
+CREATE INDEX IF NOT EXISTS comment_subreddit ON comment (subreddit);
+1188920000
+
+select count(*) from comment;
+
+select count(*), subreddit from comment group by subreddit order by count(*) desc limit 1000;
+
+
+
+CREATE TABLE comments_subreddit_1 PARTITION OF comments FOR VALUES IN ('Subreddit1');
+
+
+drop table comment2;
+
+
+select count(*) from comment where subreddit = 'Ratemyfeet';
+
+
+select * from comment where subreddit = 'Ratemyfeet' order by score desc;
+
+
+
+select count(*) from comment where subreddit = 'AskReddit';
+
+explain
+select text, score from comment where subreddit = 'AskReddit' and score > 100;
+
+explain
+select * from comment where score > 100 and subreddit = 'AskReddit' ;

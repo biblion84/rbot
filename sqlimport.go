@@ -2,21 +2,28 @@ package main
 
 import (
 	"database/sql"
-	//"encoding/json"
 	"fmt"
 	"io"
-	//_ "net/http/pprof"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-
+	// this is a 2x faster drop-in replacement for encoding/json
 	"github.com/goccy/go-json"
 	"github.com/klauspost/compress/zstd"
 )
+
+// This script is used to export the reddit dumps into a postgres sql table
+// on my hardware I get a sustained 150k rows inserted per second
+// it stills takes hours to load all the data, if you want to use this for your own project, you'll need to at least update
+// some hardcoded paths in this file and the hardcoded credentials in db.go
+// you can use either sqlite or postgres
+// 	I found that I insert faster in postgres, index creation is also a lot faster
+// 	the single thread nature of sqlite as it turns out was limiting the ingestion speed
 
 // global database, because fuck it
 var DB *sql.DB
@@ -24,9 +31,6 @@ var DB *sql.DB
 func Decode[T any](r io.Reader, out chan T, reject chan error) {
 
 	dec := json.NewDecoder(r)
-	i := 0
-	start := time.Now()
-
 	for dec.More() {
 		var result T
 		err := dec.Decode(&result)
@@ -34,18 +38,28 @@ func Decode[T any](r io.Reader, out chan T, reject chan error) {
 		if err != nil {
 			reject <- err
 		}
-		i++
-		if i%10_000 == 0 {
-			fmt.Printf("%d %dms elapsed\t", i, time.Since(start).Milliseconds())
-			start = time.Now()
-		}
-
 	}
 }
 
-func Ingest[T any](in chan T, dispatch func([]T)) {
-	accLen := 100_000
+func prettyPrint(x int) string {
+	printed := []rune(strconv.Itoa(x))
 
+	prettyPrinted := ""
+
+	for i := 0; i < len(printed); i++ {
+		if i%3 == 0 && i != 0 {
+			prettyPrinted = "_" + prettyPrinted
+		}
+
+		prettyPrinted = string(printed[len(printed)-1-i]) + prettyPrinted
+	}
+
+	return prettyPrinted
+}
+
+func Ingest[T any](in chan T, dispatch func([]T)) {
+	accLen := 10_000
+	beginning := time.Now()
 	i := 0
 	inFLight := make(chan struct{}, runtime.NumCPU())
 	accumulator := make([]T, 0, accLen)
@@ -53,14 +67,16 @@ func Ingest[T any](in chan T, dispatch func([]T)) {
 		accumulator = append(accumulator, submission)
 		if len(accumulator) == accLen {
 			i++
-			//start := time.Now()
 			inFLight <- struct{}{}
-			go func(accumulator []T) {
+			start := time.Now()
+			go func(i int, accumulator []T) {
 				dispatch(accumulator)
-				//fmt.Printf("took %d ms\t", time.Since(start).Milliseconds())
 				<-inFLight
-			}(accumulator)
-			fmt.Println(i)
+				if (i*accLen)%10_000 == 0 {
+					fmt.Printf("%s: total : %sms took %sms\n", prettyPrint(i*accLen),
+						prettyPrint(int(time.Since(beginning).Milliseconds())), prettyPrint(int(time.Since(start).Milliseconds())))
+				}
+			}(i, accumulator)
 			accumulator = make([]T, 0, accLen)
 		}
 	}
@@ -89,18 +105,17 @@ func canonalize(s string) string {
 	return s
 }
 
-// Some comments do not have their foreign keys satisfied
 func DispatchComments(in []Comment) {
 	tx, err := DB.Begin()
 	p(err)
 
-	stmt, err := tx.Prepare(`INSERT INTO comment (id, text, submission_id, parent_id, subreddit, author, score, created_utc)
-								VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`)
+	stmt, err := tx.Prepare(`INSERT INTO comment2 (id, text, submission_id, parent_id, subreddit, author, score, created_utc)
+								VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id,subreddit) DO NOTHING`)
 	p(err)
 
 	for _, c := range in {
 		_, err = stmt.Exec(sanitize(c.Id), sanitize(c.Text), canonalize(sanitize(c.SubmissionID)), canonalize(sanitize(string(c.ParentID))),
-			sanitize(c.Subreddit), sanitize(c.Author), c.Score, "0")
+			sanitize(c.Subreddit), sanitize(c.Author), c.Score, sanitizeInteger(c.CreatedUTC))
 		if err != nil {
 			fmt.Println(c)
 			p(err)
@@ -143,7 +158,7 @@ func DispatchSubmissions(subreddits map[string]bool) func(in []Submission) {
 		tx, err := DB.Begin()
 		p(err)
 
-		stmt, err := tx.Prepare(`INSERT INTO submission2 (id, author, author_created_utc, created_utc, domain, is_original_content, is_self, 
+		stmt, err := tx.Prepare(`INSERT INTO submission (id, author, author_created_utc, created_utc, domain, is_original_content, is_self, 
               name, num_comments, num_crossposts, over18, pinned, score, subreddit, 
 			  thumbnail, title, total_awards_received, upvote_ratio, url, url_overridden_by_dest, view_count) 
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
@@ -167,9 +182,6 @@ func DispatchSubmissions(subreddits map[string]bool) func(in []Submission) {
 }
 
 func main() {
-	//go func() {
-	//	log.Println(http.ListenAndServe("localhost:6060", nil))
-	//}()
 	db, err := OpenPostgresDatabase()
 	p(err)
 
@@ -221,32 +233,11 @@ func main() {
 
 		if SUBMISSION {
 			submissionChan := make(chan Submission, 100_000)
-
 			go Ingest(submissionChan, dispatchSubmissions)
-
-			//go func() {
-			//	i := 0
-			//	for {
-			//		<-submissionChan
-			//		i++
-			//		if i%10_000 == 0 {
-			//			fmt.Printf("%d ingested\n", i)
-			//		}
-			//	}
-			//}()
-
 			Decode(reader, submissionChan, rejectChan)
 		} else {
 			commentChan := make(chan Comment, 10)
-
 			go Ingest(commentChan, DispatchComments)
-
-			//go func() {
-			//	for {
-			//		<-commentChan
-			//	}
-			//}()
-
 			Decode(reader, commentChan, rejectChan)
 		}
 		file.Close()
@@ -255,10 +246,7 @@ func main() {
 		fmt.Printf("took %d s\t", time.Since(start).Seconds())
 	}
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	wg.Wait()
-
+	db.Close()
 }
 
 func GetSubreddits(db *sql.DB) (map[string]bool, error) {

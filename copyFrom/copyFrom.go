@@ -8,11 +8,19 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/klauspost/compress/zstd"
 )
+
+// I tried using postgres' COPY table FROM PROGRAM
+// But as it turns out, it is not concurrent, so the insertion rate was lower than my stupid sqlimport.go script
+// This script decompress the .zst file, convert it to a tab separated csv so that it can be fed to postgres
+// On my hardware I get ~100k insert per second
+
+// TODO : implement submission
+// only comments were implemented as it was a test to see if I can insert more rows/s compared to the bruteforce way of sqlimport.go
 
 func Decode[T any](r io.Reader, out chan T) {
 
@@ -66,6 +74,9 @@ func Ingest[T any](in chan T, toCsv func(T) []string, dispatch func([][]string))
 	accLen := 10_000
 	accumulator := make([][]string, 0, accLen)
 	inFlight := make(chan struct{}, 1)
+	i := 0
+	start := time.Now()
+
 	for submission := range in {
 		accumulator = append(accumulator, toCsv(submission))
 		if len(accumulator) == accLen {
@@ -73,6 +84,11 @@ func Ingest[T any](in chan T, toCsv func(T) []string, dispatch func([][]string))
 			dispatch(accumulator)
 			accumulator = make([][]string, 0, accLen)
 			<-inFlight
+			i++
+			if i*accLen == 1_000_000 {
+				totalTime := time.Since(start).Milliseconds()
+				os.WriteFile("time.txt", []byte(strconv.FormatInt(totalTime, 10)), 0)
+			}
 		}
 	}
 }
@@ -89,10 +105,18 @@ func toCsvComment(c Comment) []string {
 }
 
 func main() {
+
+	if len(os.Args) < 2 {
+		panic("need a month")
+	}
+
+	month := os.Args[1]
+
 	paths, err := filepath.Glob(path.Join("D:", "reddit", "*"))
 	p(err)
 
 	for _, filepath := range paths {
+
 		file, err := os.Open(filepath)
 		p(err)
 
@@ -125,10 +149,6 @@ func main() {
 		file.Close()
 		reader.Close()
 	}
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	wg.Wait()
 
 }
 

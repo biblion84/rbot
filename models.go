@@ -37,7 +37,7 @@ type Comment struct {
 	Subreddit    string          `json:"subreddit"`
 	Author       string          `json:"author"`
 	Score        int             `json:"score"`
-	//CreatedUTC   json.RawMessage `json:"created_utc"`
+	CreatedUTC   json.RawMessage `json:"created_utc"`
 }
 
 type Subreddit struct {
