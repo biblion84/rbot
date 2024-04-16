@@ -109,8 +109,8 @@ func DispatchComments(in []Comment) {
 	tx, err := DB.Begin()
 	p(err)
 
-	stmt, err := tx.Prepare(`INSERT INTO comment2 (id, text, submission_id, parent_id, subreddit, author, score, created_utc)
-								VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id,subreddit) DO NOTHING`)
+	stmt, err := tx.Prepare(`INSERT INTO comment (id, text, submission_id, parent_id, subreddit, author, score, created_utc)
+								VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`)
 	p(err)
 
 	for _, c := range in {

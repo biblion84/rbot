@@ -3,8 +3,6 @@ package main
 import (
 	"database/sql"
 	_ "embed"
-	"fmt"
-	"strings"
 
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
@@ -93,38 +91,18 @@ CREATE TABLE if not exists comment (
 
 -- test db, so that I have a feeling on the index impacts, before creating them on the main table, which takes ages
 CREATE TABLE if not exists comment2 (
-    id TEXT,
+    id TEXT PRIMARY KEY ,
     text TEXT,
     submission_id TEXT, -- foreign key on submission(id)
     parent_id TEXT,
     subreddit TEXT, -- foreign key to subreddit(name)
     author TEXT,
     score INTEGER,
-    created_utc INTEGER,
-    PRIMARY KEY (id, subreddit)
-) PARTITION BY LIST(subreddit);
-CREATE INDEX IF NOT EXISTS comment2_subreddit_idx on comment2(subreddit);
+    created_utc INTEGER
+);
+-- CREATE INDEX IF NOT EXISTS comment2_subreddit_idx on comment2(subreddit);
 `)
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(PartitionComment("comment2"))
 	return err
-}
-
-//go:embed embed/popularSubreddits.txt
-var popularSubreddits string
-
-func PartitionComment(tableName string) string {
-	query := ""
-	for _, s := range strings.Fields(popularSubreddits) {
-		query += fmt.Sprintf("CREATE TABLE comment_%s PARTITION OF %s FOR VALUES IN ('%s');\n",
-			s, tableName, s)
-	}
-
-	query += fmt.Sprintf("CREATE TABLE default_%s PARTITION OF %s DEFAULT;\n",
-		tableName, tableName)
-	return query
 }
 
 func CreateSqliteTables(db *sql.DB) error {
